@@ -13,14 +13,19 @@ import { Declaration, DeclarationType } from '../analyzer/declaration';
 import { Program } from '../analyzer/program';
 import { ParseTreeWalker } from '../analyzer/parseTreeWalker';
 import { ClassNode, FunctionNode, ParseNodeType } from '../parser/parseNodes';
+import { ReferencesProvider } from '../languageService/referencesProvider';
 import { CallHierarchyProvider } from '../languageService/callHierarchyProvider';
 import { DocumentSymbolCollector } from '../languageService/documentSymbolCollector';
-import { AnalyzerService } from '../analyzer/service';
-import { ConsoleLogger } from '../common/consolelogger';
-import { ConfigOptions } from '../common/configOptions';
-import { createFromRealFileSystem } from '../common/realFileSystem';
+import { AnalyzerService, AnalyzerServiceOptions } from '../analyzer/service';
+import { StandardConsole } from '../common/console';
+import { CommandLineOptions } from '../common/commandLineOptions';
+import { createFromRealFileSystem, RealTempFile } from '../common/realFileSystem';
 import { Uri } from '../common/uri/uri';
 import { NameNode } from '../parser/parseNodes';
+import { ServiceProvider } from '../common/serviceProvider';
+import { ReferenceUseCase } from '../common/extensibility';
+import { createServiceProvider } from '../common/serviceProviderExtensions';
+import { PyrightFileSystem } from '../pyrightFileSystem';
 
 interface CallStack {
     declaration: Declaration;
@@ -63,7 +68,9 @@ function findMethodDeclaration(
         return undefined;
     }
 
-    const decls = DocumentSymbolCollector.getDeclarationsForNode(program, methodNode.d.name, CancellationToken.None);
+    const decls = DocumentSymbolCollector.getDeclarationsForNode(program, methodNode.d.name, CancellationToken.None, {
+        resolveLocalNames: true,
+    });
     return decls.length > 0 ? decls[0] : undefined;
 }
 
@@ -91,7 +98,6 @@ async function get_call_stack(
     justMyCode: boolean
 ): Promise<CallStack> {
     const visited = new Set<string>();
-    const provider = new CallHierarchyProvider(program, CancellationToken.None);
 
     async function trace(decl: Declaration): Promise<CallStack | null> {
         const declKey = `${decl.uri.toUserVisibleString()}:${decl.range.start.line}:${decl.range.start.character}`;
@@ -110,33 +116,49 @@ async function get_call_stack(
             calls: [],
         };
 
-        const outgoingCalls = await provider.getOutgoingCalls(decl);
+        const provider = new CallHierarchyProvider(program, decl.uri, decl.range.start, CancellationToken.None);
+        const outgoingCalls = provider.getOutgoingCalls();
 
-        for (const call of outgoingCalls) {
-            const calleeDecl = call.declaration;
+        if (outgoingCalls) {
+            for (const call of outgoingCalls) {
+                const referencesResult = ReferencesProvider.getDeclarationForPosition(
+                    program,
+                    Uri.parse(call.to.uri, program.serviceProvider),
+                    call.to.selectionRange.start,
+                    undefined,
+                    ReferenceUseCase.References,
+                    CancellationToken.None
+                );
 
-            if (justMyCode) {
-                const isThirdParty = !calleeDecl.uri.toUserVisibleString().startsWith(projectRoot.toUserVisibleString());
-                const isTypingStub = calleeDecl.uri.toUserVisibleString().includes('stdlib/typing.pyi');
-                if (isThirdParty && !isTypingStub) {
+                if (!referencesResult || referencesResult.declarations.length === 0) {
                     continue;
                 }
-            }
 
-            // The call hierarchy provider can sometimes return the import statement
-            // as a declaration. We want to resolve that to the actual function.
-            let finalDecl = calleeDecl;
-            if (calleeDecl.type === DeclarationType.Alias) {
-                 const resolved = program.evaluator?.resolveAlias(calleeDecl, true);
-                 if(resolved && resolved.length > 0) {
-                    finalDecl = resolved[0];
-                 }
-            }
+                let calleeDecl = referencesResult.declarations[0];
 
+                if (justMyCode) {
+                    const isThirdParty = !calleeDecl.uri
+                        .toUserVisibleString()
+                        .startsWith(projectRoot.toUserVisibleString());
+                    const isTypingStub = calleeDecl.uri.toUserVisibleString().includes('stdlib');
+                    if (isThirdParty && !isTypingStub) {
+                        continue;
+                    }
+                }
 
-            const calleeStack = await trace(finalDecl);
-            if (calleeStack) {
-                callStackNode.calls.push(calleeStack);
+                // The call hierarchy provider can sometimes return the import statement
+                // as a declaration. We want to resolve that to the actual function.
+                if (calleeDecl.type === DeclarationType.Alias) {
+                    const resolved = program.evaluator?.resolveAliasDeclaration(calleeDecl, true);
+                    if (resolved) {
+                        calleeDecl = resolved;
+                    }
+                }
+
+                const calleeStack = await trace(calleeDecl);
+                if (calleeStack) {
+                    callStackNode.calls.push(calleeStack);
+                }
             }
         }
 
@@ -150,7 +172,10 @@ async function get_call_stack(
 }
 
 function formatCallStackForTest(stack: CallStack, projectRoot: Uri, indent = ''): string {
-    const relativePath = path.relative(projectRoot.toUserVisibleString(), stack.declaration.uri.toUserVisibleString());
+    const relativePath = path.relative(
+        projectRoot.toUserVisibleString(),
+        stack.declaration.uri.toUserVisibleString()
+    );
     let result = `${indent}${stack.name} (in ${relativePath})\n`;
 
     // Sort calls for deterministic output in tests
@@ -162,33 +187,68 @@ function formatCallStackForTest(stack: CallStack, projectRoot: Uri, indent = '')
     return result;
 }
 
-
 describe('get_call_stack End-to-End Test', () => {
     // Note: This test is slower than a typical unit test because it initializes
     // a Pyright service on a real repository on disk.
-    const projectRootPath = path.resolve(__dirname, '../../../../e2e_test_astroid/astroid');
-    const projectRoot = Uri.file(projectRootPath);
+    const projectRootPath = path.join(__dirname, '..', '..', '..', '..', 'e2e_test_astroid', 'astroid');
+    let serviceProvider: ServiceProvider;
+    let projectRoot: Uri;
     let program: Program;
 
-    beforeAll(() => {
-        const realFs = createFromRealFileSystem();
-        const logger = new ConsoleLogger();
-        const service = new AnalyzerService('e2e-test-service', realFs, logger);
+    beforeAll(async () => {
+        const console = new StandardConsole();
+        const tempFile = new RealTempFile();
 
-        const configOptions = new ConfigOptions(projectRoot);
-        configOptions.projectRoot = projectRoot;
-        configOptions.autoSearchPaths = true;
+        // Follow pyright.ts pattern for creating the file system.
+        const fileSystem = new PyrightFileSystem(createFromRealFileSystem(tempFile, console));
 
-        service.setOptions(configOptions);
+        // Use the helper to create a fully initialized service provider.
+        serviceProvider = createServiceProvider(fileSystem, console, tempFile);
 
+        // Now that the service provider is initialized, we can create URIs.
+        projectRoot = Uri.file(projectRootPath, serviceProvider);
+
+        // Create a service instance.
+        const service = new AnalyzerService('e2e-test-service', serviceProvider, {
+            console,
+            fileSystem,
+        });
+
+        // The analysis performed by the service is asynchronous. To prevent the test
+        // from starting before analysis is complete (which causes logging after the
+        // test is done), we'll create a promise that resolves when the service
+        // signals completion.
+        const analysisCompletePromise = new Promise<void>((resolve) => {
+            service.setCompletionCallback(() => {
+                resolve();
+            });
+        });
+
+        // Set up command line options to configure the service. This follows the
+        // pattern used in pyright.ts for command-line execution. The project root
+        // is the directory where pyright starts its search.
+        const commandLineOptions = new CommandLineOptions(projectRoot.toUserVisibleString(), false);
+
+        // Mimics the CLI behavior, allowing pyright to discover installed packages.
+        commandLineOptions.configSettings.autoSearchPaths = true;
+
+        // Provide a direct path to the python interpreter. This is the most reliable
+        // way to ensure the correct environment is used for analysis, overriding
+        // any environment discovery logic.
+        commandLineOptions.configSettings.pythonPath = path.join(projectRootPath, '..', '.venv', 'bin', 'python');
+
+        // Pass the options to the service to initialize the program and start analysis.
+        service.setOptions(commandLineOptions);
+
+        // Get the program instance.
         program = service.test_program;
-        while (program.analyze()) {
-            // Wait for analysis to complete
-        }
-    });
+
+        // Wait for the analysis to finish before proceeding with the tests.
+        await analysisCompletePromise;
+    }, 30000);
 
     test('should trace call stack for AstroidManager.ast_from_file', async () => {
-        const managerPyFile = Uri.file(path.join(projectRootPath, 'astroid/manager.py'));
+        const managerPyFile = Uri.file(path.join(projectRootPath, 'astroid', 'manager.py'), serviceProvider);
 
         const startDecl = findMethodDeclaration(program, managerPyFile, 'AstroidManager', 'ast_from_file');
         assert(startDecl, 'Could not find declaration for ast_from_file');
@@ -226,6 +286,6 @@ ast_from_file (in astroid/manager.py)
         assert(formattedStack.includes('  parse (in astroid/builder.py)'));
         assert(formattedStack.includes('    _pre_build (in astroid/builder.py)'));
         assert(formattedStack.includes('      get_source_file (in astroid/modutils.py)'));
-
     }, 30000); // Increase timeout for this slow test
 });
+
