@@ -90,3 +90,29 @@ This section outlines a practical plan for building the context management tool 
     *   Write tests for `get_source_code` and `get_documentation` to ensure they correctly extract content for various functions.
     *   *Reference*: Pyright's own "four-slash" tests provide an excellent model for this kind of integration testing. See files like [`showcallhierarchy.outgoingCalls.function.fourslash.ts`](../packages/pyright-internal/src/tests/fourslash/showcallhierarchy.outgoingCalls.function.fourslash.ts) for examples of how to script and verify language service features.
 3.  **Benchmark Performance**: Measure the time and memory required for `initialize_project` on large repositories to identify potential bottlenecks and areas for optimization.
+
+## 6. Running the Test Sketch
+
+The repository now includes a test file, [`codeMapBuilder.test.ts`](../packages/pyright-internal/src/tests/codeMapBuilder.test.ts), which serves as a proof-of-concept for the "map-building" process. This test demonstrates how to programmatically access Pyright's internal APIs to parse code, find symbols, and resolve references.
+
+Follow these steps to run the test and see it in action.
+
+### Environment Setup
+1.  **Node.js**: Ensure you have a recent version of Node.js and npm installed.
+2.  **Install Dependencies**: From the root of the `pyright` repository, run the following command to install all necessary dependencies for the monorepo:
+    ```bash
+    npm install
+    ```
+
+### Running the Test
+To avoid running the entire test suite (which can be time-consuming), you can run the specific `codeMapBuilder.test.ts` file using the following command from the repository root:
+
+```bash
+npx lerna run test:norebuild --scope pyright-internal -- --testPathPattern=codeMapBuilder.test.ts
+```
+
+**Command Breakdown:**
+*   `npx lerna run test:norebuild`: Executes the `test:norebuild` script. We use this script to avoid the unnecessary and slow webpack build step.
+*   `--scope pyright-internal`: Specifies that the command should only run in the `pyright-internal` package, which is where the test resides.
+*   `--`: A separator that indicates all subsequent arguments should be passed directly to the underlying `jest` command.
+*   `--testPathPattern=codeMapBuilder.test.ts`: A Jest option that filters the tests to run, matching only the filename of our new test sketch.
