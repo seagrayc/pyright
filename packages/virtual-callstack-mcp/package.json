@@ -1,0 +1,19 @@
+{
+  "name": "virtual-callstack-mcp",
+  "version": "1.0.0",
+  "description": "An MCP server for providing virtual call stacks from a Python codebase using Pyright.",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.4.0",
+    "pyright-internal": "workspace:*"
+  }
+}
