@@ -18,10 +18,6 @@ This project uses a virtual environment to manage its dependencies.
         ```bash
         source venv/bin/activate
         ```
-    *   On Windows:
-        ```bash
-        .\\venv\\Scripts\\activate
-        ```
 
 3.  **Install the dependencies:**
 
