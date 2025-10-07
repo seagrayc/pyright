@@ -109,16 +109,7 @@ main (in main.py)
                 description: 'with library calls shown but not explored',
                 myCodeMaxDepth: 4,
                 notMyCodeMaxDepth: 1,
-                expectedStack: `
-ast_from_file (in manager.py)
-  file_stream (in manager.py)
-    *open (in stdlib/builtins.pyi)
-  parse (in builder.py)
-    AstroidBuilder (in builder.py)
-      __init__ (in builder.py)
-    _pre_build (in builder.py)
-      get_source_file (in modutils.py)
-`.trim(),
+                expectedStack: ``.trim(),
             },
         ],
     },
@@ -161,11 +152,28 @@ main (in main.py)
 `.trim(),
             },
         ],
+    },    {
+        name: 'openhands',
+        path: path.join('/home/brent/repos/OpenHands'),
+        pythonPath: path.join('/home/brent/.cache/pypoetry/virtualenvs/openhands-ai-kMiABEKe-py3.12/bin'),
+        entrypoint: {
+            file: 'openhands/core/main.py',
+            type: 'function',
+            functionName: 'run_main',
+        },
+        tests: [
+            {
+                description: 'with library calls shown but not explored',
+                myCodeMaxDepth: 4,
+                notMyCodeMaxDepth: 1,
+                expectedStack: ``.trim(),
+            },
+        ],
     },
 ];
 
 // Specify which repositories from the array to run tests on by their index.
-const reposToRun: number[] = [1];
+const reposToRun: number[] = [3];
 
 /**
  * Finds the declaration for a method within a class in a given file.
