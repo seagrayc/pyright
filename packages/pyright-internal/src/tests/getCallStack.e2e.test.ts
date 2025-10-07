@@ -175,7 +175,7 @@ main (in main.py)
 // Specify which repositories from the array to run tests on by their index.
 // Temporarily disabling this test as it points to a non-existent local directory
 // and causes the test runner to time out.
-const reposToRun: number[] = [];
+const reposToRun: number[] = [3];
 
 /**
  * Finds the declaration for a method within a class in a given file.
