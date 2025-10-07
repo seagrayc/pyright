@@ -25,6 +25,10 @@
     "optionalDependencies": {
         "fsevents": "~2.3.3"
     },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.4.0",
+        "vscode-jsonrpc": "^9.0.0-next.5"
+    },
     "devDependencies": {
         "@types/node": "^22.10.5",
         "copy-webpack-plugin": "^11.0.0",
