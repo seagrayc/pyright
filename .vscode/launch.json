@@ -131,6 +131,24 @@
             "console": "integratedTerminal",
             "internalConsoleOptions": "neverOpen",
             "program": "${workspaceFolder}/packages/pyright-internal/node_modules/jest/bin/jest"
+        },
+        
+        {
+            "name": "Pyright MCP Server (SSE)",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceRoot}/packages/pyright/dist/mcp-server-sse.js",
+            "preLaunchTask": "npm: build:cli:dev",
+            "smartStep": true,
+            "sourceMaps": true,
+            "console": "integratedTerminal",
+            "env": {
+                "PORT": "3333"
+            },
+            "outFiles": [
+                "${workspaceRoot}/packages/pyright/dist/**/*.js"
+            ],
+            "internalConsoleOptions": "openOnSessionStart"
         }
     ]
 }

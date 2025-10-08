@@ -10,20 +10,20 @@ import * as path from 'path';
 import { CancellationToken } from 'vscode-jsonrpc';
 
 import { Declaration, DeclarationType } from '../analyzer/declaration';
-import { Program } from '../analyzer/program';
 import { ParseTreeWalker } from '../analyzer/parseTreeWalker';
-import { ClassNode, FunctionNode, ParseNodeType } from '../parser/parseNodes';
-import { ReferencesProvider } from '../languageService/referencesProvider';
+import { Program } from '../analyzer/program';
+import { AnalyzerService } from '../analyzer/service';
+import { CommandLineOptions } from '../common/commandLineOptions';
+import { StandardConsole } from '../common/console';
+import { ReferenceUseCase } from '../common/extensibility';
+import { createFromRealFileSystem, RealTempFile } from '../common/realFileSystem';
+import { ServiceProvider } from '../common/serviceProvider';
+import { createServiceProvider } from '../common/serviceProviderExtensions';
+import { Uri } from '../common/uri/uri';
 import { CallHierarchyProvider } from '../languageService/callHierarchyProvider';
 import { DocumentSymbolCollector } from '../languageService/documentSymbolCollector';
-import { AnalyzerService } from '../analyzer/service';
-import { StandardConsole } from '../common/console';
-import { CommandLineOptions } from '../common/commandLineOptions';
-import { createFromRealFileSystem, RealTempFile } from '../common/realFileSystem';
-import { Uri } from '../common/uri/uri';
-import { ServiceProvider } from '../common/serviceProvider';
-import { ReferenceUseCase } from '../common/extensibility';
-import { createServiceProvider } from '../common/serviceProviderExtensions';
+import { ReferencesProvider } from '../languageService/referencesProvider';
+import { ClassNode, FunctionNode, ParseNodeType } from '../parser/parseNodes';
 import { PyrightFileSystem } from '../pyrightFileSystem';
 
 interface CallStack {
@@ -152,7 +152,8 @@ main (in main.py)
 `.trim(),
             },
         ],
-    },    {
+    },
+    {
         name: 'openhands',
         path: path.join('/home/brent/repos/OpenHands'),
         pythonPath: path.join('/home/brent/.cache/pypoetry/virtualenvs/openhands-ai-kMiABEKe-py3.12/bin'),

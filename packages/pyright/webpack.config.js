@@ -17,6 +17,8 @@ module.exports = (_, { mode }) => {
         entry: {
             pyright: './src/pyright.ts',
             'pyright-langserver': './src/langserver.ts',
+            'mcp-server': './src/mcpServer.ts',
+            'mcp-server-sse': './src/mcpServerSse.ts',
         },
         target: 'node',
         output: {
